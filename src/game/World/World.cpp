@@ -830,6 +830,8 @@ void World::LoadConfigSettings(bool reload)
     setConfig(CONFIG_BOOL_PATH_FIND_OPTIMIZE, "PathFinder.OptimizePath", true);
     setConfig(CONFIG_BOOL_PATH_FIND_NORMALIZE_Z, "PathFinder.NormalizeZ", false);
 
+    setConfig(CONFIG_BOOL_CFBG_ENABLED, "BattleGround.CrossfactionQueueing", false); // Should be false for PR
+
     sLog.outString();
 }
 
@@ -1183,6 +1185,9 @@ void World::SetInitialWorldSettings()
     sLog.outString("Loading GameTeleports...");
     sObjectMgr.LoadGameTele();
 
+    sLog.outString("Loading Questgiver Greetings...");
+    sObjectMgr.LoadQuestgiverGreeting();
+
     ///- Loading localization data
     sLog.outString("Loading Localization strings...");
     sObjectMgr.LoadCreatureLocales();                       // must be after CreatureInfo loading
@@ -1193,6 +1198,7 @@ void World::SetInitialWorldSettings()
     sObjectMgr.LoadPageTextLocales();                       // must be after PageText loading
     sObjectMgr.LoadGossipMenuItemsLocales();                // must be after gossip menu items loading
     sObjectMgr.LoadPointOfInterestLocales();                // must be after POI loading
+    sObjectMgr.LoadQuestgiverGreetingLocales();
     sLog.outString(">>> Localization strings loaded");
     sLog.outString();
 

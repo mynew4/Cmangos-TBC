@@ -850,6 +850,8 @@ bool Player::Create(uint32 guidlow, const std::string& name, uint8 race, uint8 c
     }
     // all item positions resolved
 
+    SetFakeValues();
+
     return true;
 }
 
@@ -4165,7 +4167,7 @@ void Player::DeleteFromDB(ObjectGuid playerguid, uint32 accountId, bool updateRe
             CharacterDatabase.PExecute("DELETE FROM character_reputation WHERE guid = '%u'", lowguid);
             CharacterDatabase.PExecute("DELETE FROM character_skills WHERE guid = '%u'", lowguid);
             CharacterDatabase.PExecute("DELETE FROM character_spell WHERE guid = '%u'", lowguid);
-            CharacterDatabase.PExecute("DELETE FROM character_spell_cooldown WHERE guid = '%u'", lowguid);
+            CharacterDatabase.PExecute("DELETE FROM character_spell_cooldown WHERE LowGuid = '%u'", lowguid);
             CharacterDatabase.PExecute("DELETE FROM character_ticket WHERE guid = '%u'", lowguid);
             CharacterDatabase.PExecute("DELETE FROM item_instance WHERE owner_guid = '%u'", lowguid);
             CharacterDatabase.PExecute("DELETE FROM character_social WHERE guid = '%u' OR friend='%u'", lowguid, lowguid);
@@ -12330,61 +12332,80 @@ void Player::SendPreparedQuest(ObjectGuid guid) const
 
     uint32 status = qmi0.m_qIcon;
 
-    // single element case
-    if (questMenu.MenuItemCount() == 1)
-    {
-        // Auto open -- maybe also should verify there is no greeting
-        uint32 quest_id = qmi0.m_qId;
-        Quest const* pQuest = sObjectMgr.GetQuestTemplate(quest_id);
+    uint32 type;
+    if (guid.IsCreature())
+        type = QUESTGIVER_CREATURE;
+    else if (guid.IsGameObject())
+        type = QUESTGIVER_GAMEOBJECT;
 
-        if (pQuest)
-        {
-            if (status == DIALOG_STATUS_REWARD_REP && !GetQuestRewardStatus(quest_id))
-                PlayerTalkClass->SendQuestGiverRequestItems(pQuest, guid, CanRewardQuest(pQuest, false), true);
-            else if (status == DIALOG_STATUS_INCOMPLETE)
-                PlayerTalkClass->SendQuestGiverRequestItems(pQuest, guid, false, true);
-            // Send completable on repeatable and autoCompletable quest if player don't have quest
-            // TODO: verify if check for !pQuest->IsDailyOrWeekly() is really correct (possibly not)
-            else if (pQuest->IsAutoComplete() && pQuest->IsRepeatable() && !pQuest->IsDailyOrWeekly())
-                PlayerTalkClass->SendQuestGiverRequestItems(pQuest, guid, CanCompleteRepeatableQuest(pQuest), true);
-            else
-                PlayerTalkClass->SendQuestGiverQuestDetails(pQuest, guid, true);
-        }
-    }
-    // multiply entries
-    else
+    if (QuestgiverGreeting const* data = sObjectMgr.GetQuestgiverGreetingData(guid.GetEntry(), type))
     {
         QEmote qe;
-        qe._Delay = 0;
-        qe._Emote = 0;
-        std::string title = "";
-
-        // need pet case for some quests
-        if (Creature* pCreature = GetMap()->GetAnyTypeCreature(guid))
+        qe._Delay = data->emoteDelay;
+        qe._Emote = data->emoteId;
+        std::string title = data->text;
+        int loc_idx = GetSession()->GetSessionDbLocaleIndex();
+        sObjectMgr.GetQuestgiverGreetingLocales(guid.GetEntry(), type, loc_idx, &title);
+        PlayerTalkClass->SendQuestGiverQuestList(qe, title, guid);
+    }
+    else
+    {
+        // single element case
+        if (questMenu.MenuItemCount() == 1)
         {
-            uint32 textid = GetGossipTextId(pCreature);
+            // Auto open -- maybe also should verify there is no greeting
+            uint32 quest_id = qmi0.m_qId;
+            Quest const* pQuest = sObjectMgr.GetQuestTemplate(quest_id);
 
-            GossipText const* gossiptext = sObjectMgr.GetGossipText(textid);
-            if (!gossiptext)
+            if (pQuest)
             {
-                qe._Delay = 0;                              // TEXTEMOTE_MESSAGE;              // zyg: player emote
-                qe._Emote = 0;                              // TEXTEMOTE_HELLO;                // zyg: NPC emote
-                title.clear();
-            }
-            else
-            {
-                qe = gossiptext->Options[0].Emotes[0];
-
-                int loc_idx = GetSession()->GetSessionDbLocaleIndex();
-
-                std::string title0 = gossiptext->Options[0].Text_0;
-                std::string title1 = gossiptext->Options[0].Text_1;
-                sObjectMgr.GetNpcTextLocaleStrings0(textid, loc_idx, &title0, &title1);
-
-                title = !title0.empty() ? title0 : title1;
+                if (status == DIALOG_STATUS_REWARD_REP && !GetQuestRewardStatus(quest_id))
+                    PlayerTalkClass->SendQuestGiverRequestItems(pQuest, guid, CanRewardQuest(pQuest, false), true);
+                else if (status == DIALOG_STATUS_INCOMPLETE)
+                    PlayerTalkClass->SendQuestGiverRequestItems(pQuest, guid, false, true);
+                // Send completable on repeatable and autoCompletable quest if player don't have quest
+                // TODO: verify if check for !pQuest->IsDailyOrWeekly() is really correct (possibly not)
+                else if (pQuest->IsAutoComplete() && pQuest->IsRepeatable() && !pQuest->IsDailyOrWeekly())
+                    PlayerTalkClass->SendQuestGiverRequestItems(pQuest, guid, CanCompleteRepeatableQuest(pQuest), true);
+                else
+                    PlayerTalkClass->SendQuestGiverQuestDetails(pQuest, guid, true);
             }
         }
-        PlayerTalkClass->SendQuestGiverQuestList(qe, title, guid);
+        // multiply entries
+        else
+        {
+            QEmote qe;
+            qe._Delay = 0;
+            qe._Emote = 0;
+            std::string title = "";
+
+            // need pet case for some quests
+            if (Creature* pCreature = GetMap()->GetAnyTypeCreature(guid))
+            {
+                uint32 textid = GetGossipTextId(pCreature);
+
+                GossipText const* gossiptext = sObjectMgr.GetGossipText(textid);
+                if (!gossiptext)
+                {
+                    qe._Delay = 0;                              // TEXTEMOTE_MESSAGE;              // zyg: player emote
+                    qe._Emote = 0;                              // TEXTEMOTE_HELLO;                // zyg: NPC emote
+                    title.clear();
+                }
+                else
+                {
+                    qe = gossiptext->Options[0].Emotes[0];
+
+                    int loc_idx = GetSession()->GetSessionDbLocaleIndex();
+
+                    std::string title0 = gossiptext->Options[0].Text_0;
+                    std::string title1 = gossiptext->Options[0].Text_1;
+                    sObjectMgr.GetNpcTextLocaleStrings0(textid, loc_idx, &title0, &title1);
+
+                    title = !title0.empty() ? title0 : title1;
+                }
+            }
+            PlayerTalkClass->SendQuestGiverQuestList(qe, title, guid);
+        }
     }
 }
 
@@ -14429,6 +14450,8 @@ bool Player::LoadFromDB(ObjectGuid guid, SqlQueryHolder* holder)
     setFactionForRace(getRace());
     SetCharm(nullptr);
 
+    SetFakeValues();
+
     // load home bind and check in same time class/race pair, it used later for restore broken positions
     if (!_LoadHomeBind(holder->GetResult(PLAYER_LOGIN_QUERY_LOADHOMEBIND)))
     {
@@ -15991,7 +16014,7 @@ void Player::SaveToDB()
     uberInsert.addUInt32(GetGUIDLow());
     uberInsert.addUInt32(GetSession()->GetAccountId());
     uberInsert.addString(m_name);
-    uberInsert.addUInt8(getRace());
+    uberInsert.addUInt8(getORace());
     uberInsert.addUInt8(getClass());
     uberInsert.addUInt8(getGender());
     uberInsert.addUInt32(getLevel());
@@ -17608,7 +17631,7 @@ bool Player::ActivateTaxiPathTo(std::vector<uint32> const& nodes, Creature* npc 
     for (uint32 i = 1; i < nodes.size(); ++i)
     {
         uint32 path, cost;
-        uint32 lastnode = nodes[i];
+        lastnode = nodes[i];
         sObjectMgr.GetTaxiPath(prevnode, lastnode, path, cost);
 
         if (!path)
@@ -18307,6 +18330,8 @@ void Player::SetBattleGroundEntryPoint(Player* leader /*= nullptr*/)
 
 void Player::LeaveBattleground(bool teleportToEntryPoint)
 {
+    CFLeaveBattleGround();
+
     if (BattleGround* bg = GetBattleGround())
     {
         bg->RemovePlayerAtLeave(GetObjectGuid(), teleportToEntryPoint, true);
@@ -19401,7 +19426,7 @@ void Player::RemoveItemDependentAurasAndCasts(Item* pItem)
     // currently casted spells can be dependent from item
     for (uint32 i = 0; i < CURRENT_MAX_SPELL; ++i)
         if (Spell* spell = GetCurrentSpell(CurrentSpellTypes(i)))
-            if (spell->getState() != SPELL_STATE_DELAYED && !HasItemFitToSpellReqirements(spell->m_spellInfo, pItem))
+            if (!HasItemFitToSpellReqirements(spell->m_spellInfo, pItem))
                 InterruptSpell(CurrentSpellTypes(i));
 }
 
@@ -21100,4 +21125,136 @@ void Player::UpdateNewInstanceIdTimers(TimePoint const& now)
         else
             ++iter;
     }
+}
+
+void Player::CFJoinBattleGround()
+{
+    if (!sWorld.getConfig(CONFIG_BOOL_CFBG_ENABLED))
+        return;
+
+    FixLanguageSkills();
+
+    if (!NativeTeam())
+    {
+        SetByteValue(UNIT_FIELD_BYTES_0, 0, getFRace());
+        setFaction(getFFaction());
+    }
+
+    FakeDisplayID();
+
+    sWorld.InvalidatePlayerDataToAllClient(this->GetObjectGuid());
+}
+
+void Player::CFLeaveBattleGround()
+{
+    if (!sWorld.getConfig(CONFIG_BOOL_CFBG_ENABLED))
+        return;
+
+    FixLanguageSkills(true, true);
+
+    SetByteValue(UNIT_FIELD_BYTES_0, 0, getORace());
+    setFaction(getOFaction());
+    InitDisplayIds();
+
+    sWorld.InvalidatePlayerDataToAllClient(GetObjectGuid());
+}
+
+void Player::FakeDisplayID()
+{
+    if (!sWorld.getConfig(CONFIG_BOOL_CFBG_ENABLED))
+        return;
+
+    if (!NativeTeam())
+    {
+        PlayerInfo const* info = sObjectMgr.GetPlayerInfo(getRace(), getClass());
+        if (!info)
+        {
+            for (int i = 1; i <= CLASS_DRUID; i++)
+            {
+                info = sObjectMgr.GetPlayerInfo(getRace(), i);
+                if (info)
+                    break;
+            }
+        }
+
+        if (!info)
+        {
+            sLog.outError("Player %u has incorrect race/class pair. Can't init display ids.", GetGUIDLow());
+            return;
+        }
+
+        SetObjectScale(DEFAULT_OBJECT_SCALE);
+
+        uint8 gender = getGender();
+        switch (gender)
+        {
+        case GENDER_FEMALE:
+            SetDisplayId(info->displayId_f);
+            SetNativeDisplayId(info->displayId_f);
+            break;
+        case GENDER_MALE:
+            SetDisplayId(info->displayId_m);
+            SetNativeDisplayId(info->displayId_m);
+            break;
+        default:
+            sLog.outError("Invalid gender %u for player", gender);
+            return;
+        }
+    }
+}
+
+void Player::FixLanguageSkills(bool force, bool native)
+{
+    if (!sWorld.getConfig(CONFIG_BOOL_CFBG_ENABLED))
+        return;
+
+    if (!force)
+        native = NativeTeam();
+
+    // SpellId, OriginalSpell
+    auto spells = std::unordered_map<uint32, bool>();
+
+    for (auto& i : sObjectMgr.GetPlayerInfo(getORace(), getClass())->spell)
+        if (auto spell = sSpellTemplate.LookupEntry<SpellEntry>(i))
+                if (spell->Effect[0] == SPELL_EFFECT_LANGUAGE)
+                    spells[spell->Id] = true;
+
+    for (auto& i : sObjectMgr.GetPlayerInfo(getFRace(), getClass())->spell)
+        if (auto spell = sSpellTemplate.LookupEntry<SpellEntry>(i))
+                if (spell->Effect[0] == SPELL_EFFECT_LANGUAGE)
+                    spells[spell->Id] = false;
+
+    for (auto& i : spells)
+    {
+        if (i.second == native)
+            learnSpell(i.first, true);
+        else
+            this->removeSpell(i.first);
+    }
+}
+
+void Player::SetFakeValues()
+{
+    m_oRace = GetByteValue(UNIT_FIELD_BYTES_0, 0);
+    m_oFaction = GetUInt32Value(UNIT_FIELD_FACTIONTEMPLATE);
+
+    m_fRace = 0;
+
+    while (m_fRace == 0)
+    {
+        for (uint8 i = RACE_HUMAN; i <= RACE_DRAENEI; ++i)
+        {
+            if (i == RACE_GOBLIN)
+                continue;
+
+            PlayerInfo const* info = sObjectMgr.GetPlayerInfo(i, getClass());
+            if (!info || Player::TeamForRace(i) == GetOTeam())
+                continue;
+
+            if (urand(0, 5) == 0)
+                m_fRace = i;
+        }
+    }
+
+    m_fFaction = Player::getFactionForRace(m_fRace);
 }
