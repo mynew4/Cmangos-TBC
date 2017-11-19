@@ -47,7 +47,7 @@ enum
     SPELL_LAVA_BURST            = 21908,                    // Randomly trigger one of spells 21886, 21900 - 21907 which summons Go 178088
     SPELL_SUMMON_SONS_FLAME     = 21108,                    // Trigger the eight spells summoning the Son of Flame adds
 
-    MAX_ADDS_IN_SUBMERGE        = 8,
+    NB_ADDS_IN_SUBMERGE         = 8,
     NPC_SON_OF_FLAME            = 12143,
     NPC_FLAME_OF_RAGNAROS       = 13148,
 };
@@ -207,7 +207,7 @@ struct boss_ragnarosAI : public Scripted_NoMovementAI
                 {
                     m_uiEnterCombatTimer = 0;
                     // If we don't remove this passive flag, he will be unattackable after evading, this way he will enter combat
-                    m_creature->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_NPC);
+                    m_creature->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PLAYER);
                     if (m_pInstance)
                     {
                         if (Player* pPlayer = m_pInstance->GetPlayerInMap(true, false))
@@ -301,7 +301,7 @@ struct boss_ragnarosAI : public Scripted_NoMovementAI
 
             // Summon 8 elementals around the boss
             if (DoCastSpellIfCan(m_creature, SPELL_SUMMON_SONS_FLAME) == CAST_OK)
-                m_uiAddCount = 8;
+                m_uiAddCount = NB_ADDS_IN_SUBMERGE;
 
             return;
         }

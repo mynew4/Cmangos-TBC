@@ -162,6 +162,8 @@ class WorldSession
         void SizeError(WorldPacket const& packet, uint32 size) const;
 
         void SendPacket(WorldPacket const& packet) const;
+        void SendExpectedSpamRecords();
+        void SendMotd();
         void SendNotification(const char* format, ...) const ATTR_PRINTF(2, 3);
         void SendNotification(int32 string_id, ...) const;
         void SendPetNameInvalid(uint32 error, const std::string& name, DeclinedName* declinedName) const;
@@ -741,6 +743,10 @@ class WorldSession
 
         void HandleGetMirrorimageData(WorldPacket& recv_data);
     private:
+        // Additional private opcode handlers
+        void HandleComplainMail(WorldPacket& recv_data);
+        void HandleComplainChat(WorldPacket& recv_data);
+
         // private trade methods
         void moveItems(Item* myItems[], Item* hisItems[]);
         bool VerifyMovementInfo(MovementInfo const& movementInfo, ObjectGuid const& guid) const;

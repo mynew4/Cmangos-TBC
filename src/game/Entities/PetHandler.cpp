@@ -84,7 +84,7 @@ void WorldSession::HandlePetAction(WorldPacket& recv_data)
 
     if (!pet)
     {
-        if (petUnit->hasUnitState(UNIT_STAT_CONTROLLED))
+        if (petUnit->hasUnitState(UNIT_STAT_POSSESSED))
         {
             // possess case
             if (flag != uint8(ACT_COMMAND))
@@ -103,7 +103,7 @@ void WorldSession::HandlePetAction(WorldPacket& recv_data)
                 {
                     Unit* targetUnit = targetGuid ? _player->GetMap()->GetUnit(targetGuid) : nullptr;
 
-                    if (targetUnit && targetUnit != petUnit && targetUnit->isTargetableForAttack())
+                    if (targetUnit && targetUnit != petUnit && petUnit->CanAttack(targetUnit))
                     {
                         // This is true if pet has no target or has target but targets differs.
                         if (petUnit->getVictim() != targetUnit)
@@ -131,7 +131,7 @@ void WorldSession::HandlePetAction(WorldPacket& recv_data)
             {
                 case COMMAND_STAY:                          // flat=1792  // STAY
                 {
-                    if (!petUnit->hasUnitState(UNIT_STAT_CONTROLLED))
+                    if (!petUnit->hasUnitState(UNIT_STAT_POSSESSED))
                     {
                         petUnit->StopMoving();
                         petUnit->GetMotionMaster()->Clear();
@@ -142,7 +142,7 @@ void WorldSession::HandlePetAction(WorldPacket& recv_data)
                 }
                 case COMMAND_FOLLOW:                        // spellid=1792  // FOLLOW
                 {
-                    if (!petUnit->hasUnitState(UNIT_STAT_CONTROLLED))
+                    if (!petUnit->hasUnitState(UNIT_STAT_POSSESSED))
                     {
                         petUnit->StopMoving();
                         petUnit->GetMotionMaster()->Clear();
@@ -159,13 +159,13 @@ void WorldSession::HandlePetAction(WorldPacket& recv_data)
 
                     Unit* targetUnit = targetGuid ? _player->GetMap()->GetUnit(targetGuid) : nullptr;
 
-                    if (targetUnit && targetUnit != petUnit && targetUnit->isTargetableForAttack() && targetUnit->isInAccessablePlaceFor((Creature*)petUnit))
+                    if (targetUnit && targetUnit != petUnit && petUnit->CanAttack(targetUnit) && targetUnit->isInAccessablePlaceFor((Creature*)petUnit))
                     {
                         // This is true if pet has no target or has target but targets differs.
                         if (petUnit->getVictim() != targetUnit)
                         {
                             petUnit->AttackStop();
-                            if (!petUnit->hasUnitState(UNIT_STAT_CONTROLLED))
+                            if (!petUnit->hasUnitState(UNIT_STAT_POSSESSED))
                             {
                                 petUnit->GetMotionMaster()->Clear();
 
@@ -221,7 +221,7 @@ void WorldSession::HandlePetAction(WorldPacket& recv_data)
                 case REACT_DEFENSIVE:                       // recovery
                 case REACT_AGGRESSIVE:                      // activete
                 {
-                    charmInfo->SetReactState(ReactStates(spellid));
+                    petUnit->AI()->SetReactState(ReactStates(spellid));
                     break;
                 }
             }
@@ -262,14 +262,18 @@ void WorldSession::HandlePetAction(WorldPacket& recv_data)
 
             petUnit->clearUnitState(UNIT_STAT_MOVING);
 
-            Spell* spell = new Spell(petUnit, spellInfo, false);
+            uint32 flags = TRIGGERED_NONE;
+            if (!petUnit->hasUnitState(UNIT_STAT_POSSESSED))
+                flags |= TRIGGERED_PET_CAST;
+
+            Spell* spell = new Spell(petUnit, spellInfo, flags);
 
             SpellCastResult result = spell->CheckPetCast(unit_target);
 
             const SpellRangeEntry* sRange = sSpellRangeStore.LookupEntry(spellInfo->rangeIndex);
 
             if (unit_target && !(petUnit->IsWithinDistInMap(unit_target, sRange->maxRange) && petUnit->IsWithinLOSInMap(unit_target))
-                && !(GetPlayer()->IsFriendlyTo(unit_target) || petUnit->HasAuraType(SPELL_AURA_MOD_POSSESS)))
+                && petUnit->CanAttackNow(unit_target))
             {
                 charmInfo->SetSpellOpener(spellid, sRange->minRange, sRange->maxRange);
                 spell->finish(false);
@@ -277,7 +281,7 @@ void WorldSession::HandlePetAction(WorldPacket& recv_data)
 
                 petUnit->AttackStop();
 
-                if (!petUnit->hasUnitState(UNIT_STAT_CONTROLLED))
+                if (!petUnit->hasUnitState(UNIT_STAT_POSSESSED))
                 {
                     petUnit->GetMotionMaster()->Clear();
 
@@ -295,7 +299,7 @@ void WorldSession::HandlePetAction(WorldPacket& recv_data)
             }
 
             // auto turn to target unless possessed
-            if (result == SPELL_FAILED_UNIT_NOT_INFRONT && !petUnit->hasUnitState(UNIT_STAT_CONTROLLED))
+            if (result == SPELL_FAILED_UNIT_NOT_INFRONT && !petUnit->hasUnitState(UNIT_STAT_POSSESSED))
             {
                 if (unit_target)
                 {
@@ -322,15 +326,6 @@ void WorldSession::HandlePetAction(WorldPacket& recv_data)
             }
             else
             {
-                if (petUnit->hasUnitState(UNIT_STAT_CONTROLLED))
-                    Spell::SendCastResult(GetPlayer(), spellInfo, 0, result);
-                else
-                {
-                    Unit* owner = petUnit->GetMaster();
-                    if (owner && owner->GetTypeId() == TYPEID_PLAYER)
-                        Spell::SendCastResult((Player*)owner, spellInfo, 0, result, true);
-                }
-
                 if (creature && creature->IsSpellReady(*spellInfo))
                     GetPlayer()->SendClearCooldown(spellid, petUnit);
 
@@ -780,7 +775,7 @@ void WorldSession::HandlePetCastSpellOpcode(WorldPacket& recvPacket)
 
     petUnit->clearUnitState(UNIT_STAT_MOVING);
 
-    Spell* spell = new Spell(petUnit, spellInfo, false);
+    Spell* spell = new Spell(petUnit, spellInfo, TRIGGERED_PET_CAST);
     spell->m_targets = targets;
 
     SpellCastResult result = spell->CheckPetCast(nullptr);

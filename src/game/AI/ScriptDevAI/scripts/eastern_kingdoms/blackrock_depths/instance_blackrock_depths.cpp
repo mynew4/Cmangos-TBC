@@ -74,7 +74,7 @@ void instance_blackrock_depths::OnCreatureCreate(Creature* pCreature)
         case NPC_DUGHAL:
         case NPC_LOREGRAIN:
         case NPC_RIBBLY_SCREWSPIGGOT:
-            m_mNpcEntryGuidStore[pCreature->GetEntry()] = pCreature->GetObjectGuid();
+            m_npcEntryGuidStore[pCreature->GetEntry()] = pCreature->GetObjectGuid();
             break;
         case NPC_WARBRINGER_CONST:
             // Golems not in the Relict Vault?
@@ -117,7 +117,7 @@ void instance_blackrock_depths::OnCreatureCreate(Creature* pCreature)
             if (m_auiEncounter[11] == DONE)
                 pCreature->ForcedDespawn();
             else
-                m_mNpcEntryGuidStore[pCreature->GetEntry()] = pCreature->GetObjectGuid();
+                m_npcEntryGuidStore[pCreature->GetEntry()] = pCreature->GetObjectGuid();
             break;
     }
 }
@@ -177,7 +177,7 @@ void instance_blackrock_depths::OnObjectCreate(GameObject* pGo)
         default:
             return;
     }
-    m_mGoEntryGuidStore[pGo->GetEntry()] = pGo->GetObjectGuid();
+    m_goEntryGuidStore[pGo->GetEntry()] = pGo->GetObjectGuid();
 }
 
 void instance_blackrock_depths::SetData(uint32 uiType, uint32 uiData)
@@ -336,7 +336,7 @@ void instance_blackrock_depths::SetData(uint32 uiType, uint32 uiData)
                                 pSummoned->SetWalk(false);
                                 // The cronies should not engage anyone until their boss does so
                                 // the linking is done by DB
-                                pSummoned->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_NPC);
+                                pSummoned->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PLAYER);
                                 // The movement toward the kegs is handled by Hurley EscortAI
                                 // and we want the cronies to follow him there
                                 pSummoned->GetMotionMaster()->MoveFollow(pHurley, 1.0f, 0);

@@ -208,11 +208,8 @@ enum SpellState
 
 enum SpellTargets
 {
-    SPELL_TARGETS_HOSTILE,
-    SPELL_TARGETS_NOT_FRIENDLY,
-    SPELL_TARGETS_NOT_HOSTILE,
-    SPELL_TARGETS_FRIENDLY,
-    SPELL_TARGETS_AOE_DAMAGE,
+    SPELL_TARGETS_ASSISTABLE,
+    SPELL_TARGETS_AOE_ATTACKABLE,
     SPELL_TARGETS_ALL
 };
 
@@ -442,16 +439,17 @@ class Spell
 
         template<typename T> WorldObject* FindCorpseUsing();
 
+        bool CheckTargetScript(Unit * target, SpellEffectIndex eff) const;
         bool CheckTarget(Unit* target, SpellEffectIndex eff) const;
         bool CanAutoCast(Unit* target);
 
-        static void SendCastResult(Player* caster, SpellEntry const* spellInfo, uint8 cast_count, SpellCastResult result, bool isPetCastResult = false);
+        static void SendCastResult(Player const* caster, SpellEntry const* spellInfo, uint8 cast_count, SpellCastResult result, bool isPetCastResult = false);
         void SendCastResult(SpellCastResult result) const;
         void SendSpellStart() const;
         void SendSpellGo();
         void SendSpellCooldown();
         void SendInterrupted(uint8 result) const;
-        void SendChannelUpdate(uint32 time, bool properEnding = false) const;
+        void SendChannelUpdate(uint32 time, uint32 lastTick = 0) const;
         void SendChannelStart(uint32 duration);
         void SendResurrectRequest(Player* target) const;
 
@@ -473,6 +471,8 @@ class Spell
         bool m_ignoreUnselectableTarget;
         bool m_ignoreUnattackableTarget;
         bool m_triggerAutorepeat;
+        bool m_doNotProc;
+        bool m_petCast;
 
         int32 GetCastTime() const { return m_casttime; }
         uint32 GetCastedTime() const { return m_timer; }
@@ -599,9 +599,8 @@ class Spell
         //******************************************
         bool   m_canTrigger;                                // Can start trigger (m_IsTriggeredSpell can`t use for this)
         uint8  m_negativeEffectMask;                        // Use for avoid sent negative spell procs for additional positive effects only targets
-        uint32 m_procAttacker;                              // Attacker trigger flags
-        uint32 m_procVictim;                                // Victim   trigger flags
-        void   prepareDataForTriggerSystem();
+        void prepareDataForTriggerSystem();
+        void PrepareMasksForProcSystem(uint8 effectMask, uint32 &procAttacker, uint32 &procVictim, WorldObject* caster, WorldObject* target);
 
         //*****************************************
         // Spell target filling
@@ -765,7 +764,7 @@ namespace MaNGOS
         float GetCenterY() const { return i_centerY; }
 
         SpellNotifierCreatureAndPlayer(Spell& spell, Spell::UnitList& data, float radius, SpellNotifyPushType type,
-                                       SpellTargets TargetType = SPELL_TARGETS_NOT_FRIENDLY, WorldObject* originalCaster = nullptr)
+                                       SpellTargets TargetType = SPELL_TARGETS_AOE_ATTACKABLE, WorldObject* originalCaster = nullptr)
             : i_data(&data), i_spell(spell), i_push_type(type), i_radius(radius), i_TargetType(TargetType),
               i_originalCaster(originalCaster), i_castingObject(i_spell.GetCastingObject())
         {
@@ -821,37 +820,17 @@ namespace MaNGOS
 
                 switch (i_TargetType)
                 {
-                    case SPELL_TARGETS_HOSTILE:
-                        if (!i_originalCaster->IsHostileTo(itr->getSource()))
+                    case SPELL_TARGETS_ASSISTABLE:
+                        if (!i_originalCaster->CanAssistSpell(itr->getSource(), i_spell.m_spellInfo))
                             continue;
                         break;
-                    case SPELL_TARGETS_NOT_FRIENDLY:
-                        if (i_originalCaster->IsFriendlyTo(itr->getSource()))
-                            continue;
-                        break;
-                    case SPELL_TARGETS_NOT_HOSTILE:
-                        if (i_originalCaster->IsHostileTo(itr->getSource()))
-                            continue;
-                        break;
-                    case SPELL_TARGETS_FRIENDLY:
-                        if (!i_originalCaster->IsFriendlyTo(itr->getSource()))
-                            continue;
-                        break;
-                    case SPELL_TARGETS_AOE_DAMAGE:
+                    case SPELL_TARGETS_AOE_ATTACKABLE:
                     {
                         if (itr->getSource()->GetTypeId() == TYPEID_UNIT && ((Creature*)itr->getSource())->IsTotem())
                             continue;
 
-                        if (i_playerControlled)
-                        {
-                            if (i_originalCaster->IsFriendlyTo(itr->getSource()))
-                                continue;
-                        }
-                        else
-                        {
-                            if (!i_originalCaster->IsHostileTo(itr->getSource()))
-                                continue;
-                        }
+                        if (!i_originalCaster->CanAttackSpell(itr->getSource(), i_spell.m_spellInfo, true))
+                            continue;
                     }
                     break;
                     case SPELL_TARGETS_ALL:
@@ -875,7 +854,7 @@ namespace MaNGOS
                             i_data->push_back(itr->getSource());
                         break;
                     case PUSH_IN_BACK:
-                        if (i_castingObject->isInBack((Unit*)(itr->getSource()), i_radius, 2 * M_PI_F / 3))
+                        if (i_castingObject->isInBack((Unit*)(itr->getSource()), i_radius, M_PI_F / 2))  //only used for tail swipe in TBC afaik, and that should be 90 degrees in the back
                             i_data->push_back(itr->getSource());
                         break;
                     case PUSH_SELF_CENTER:

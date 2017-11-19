@@ -435,6 +435,7 @@ class ChatHandler
         bool HandleReloadLocalesPageTextCommand(char* args);
         bool HandleReloadLocalesPointsOfInterestCommand(char* args);
         bool HandleReloadLocalesQuestCommand(char* args);
+        bool HandleReloadLocalesAreaTriggerCommand(char *);
         bool HandleReloadQuestgiverGreetingLocalesCommand(char* args);
         bool HandleReloadLootTemplatesCreatureCommand(char* args);
         bool HandleReloadLootTemplatesDisenchantCommand(char* args);
@@ -474,6 +475,7 @@ class ChatHandler
         bool HandleReloadSpellTargetPositionCommand(char* args);
         bool HandleReloadSpellThreatsCommand(char* args);
         bool HandleReloadSpellPetAurasCommand(char* args);
+        bool HandleReloadExpectedSpamRecords(char* args);
 
         bool HandleResetAllCommand(char* args);
         bool HandleResetHonorCommand(char* args);

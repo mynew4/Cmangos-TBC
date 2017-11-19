@@ -929,8 +929,6 @@ void ScriptMgr::LoadDbScriptStrings()
     CheckScriptTexts(sCreatureMovementScripts, ids);
     CheckScriptTexts(sRelayScripts, ids);
 
-    sWaypointMgr.CheckTextsExistance(ids);
-
     for (std::set<int32>::const_iterator itr = ids.begin(); itr != ids.end(); ++itr)
         sLog.outErrorDb("Table `dbscript_string` has unused string id %u", *itr);
 }
@@ -1633,16 +1631,20 @@ bool ScriptAction::HandleScriptStep()
                     break;
             }
 
+            PlayPacketParameters params(PLAY_SET);
+            if (pSoundTarget)
+                params = PlayPacketParameters(PLAY_TARGET, pSoundTarget);
+
             if (m_script->data_flags & SCRIPT_FLAG_COMMAND_ADDITIONAL)
-                pSource->PlayMusic(m_script->playSound.soundId, pSoundTarget);
+                pSource->PlayMusic(m_script->playSound.soundId, params);
             else
             {
                 if (m_script->playSound.flags & 2)
-                    pSource->PlayDistanceSound(m_script->playSound.soundId, pSoundTarget);
+                    pSource->PlayDistanceSound(m_script->playSound.soundId, params);
                 else if (m_script->playSound.flags & (4 | 8))
                     m_map->PlayDirectSoundToMap(m_script->playSound.soundId, m_script->playSound.flags & 8 ? pSource->GetZoneId() : 0);
                 else
-                    pSource->PlayDirectSound(m_script->playSound.soundId, pSoundTarget);
+                    pSource->PlayDirectSound(m_script->playSound.soundId, params);
             }
             break;
         }
@@ -1682,27 +1684,31 @@ bool ScriptAction::HandleScriptStep()
             if (LogIfNotCreature(pSource))
                 break;
 
+            Creature* source = ((Creature*)pSource);
+
             // Consider add additional checks for cases where creature should not change movementType
             // (pet? in combat? already using same MMgen as script try to apply?)
 
             switch (m_script->movement.movementType)
             {
                 case IDLE_MOTION_TYPE:
-                    ((Creature*)pSource)->GetMotionMaster()->MoveIdle();
+                    source->GetMotionMaster()->MoveIdle();
                     break;
                 case RANDOM_MOTION_TYPE:
                     if (m_script->data_flags & SCRIPT_FLAG_COMMAND_ADDITIONAL)
-                        ((Creature*)pSource)->GetMotionMaster()->MoveRandomAroundPoint(pSource->GetPositionX(), pSource->GetPositionY(), pSource->GetPositionZ(), float(m_script->movement.wanderORpathId));
+                        source->GetMotionMaster()->MoveRandomAroundPoint(pSource->GetPositionX(), pSource->GetPositionY(), pSource->GetPositionZ(), float(m_script->movement.wanderORpathId));
                     else
                     {
                         float respX, respY, respZ, respO, wander_distance;
-                        ((Creature*)pSource)->GetRespawnCoord(respX, respY, respZ, &respO, &wander_distance);
+                        source->GetRespawnCoord(respX, respY, respZ, &respO, &wander_distance);
                         wander_distance = m_script->movement.wanderORpathId ? m_script->movement.wanderORpathId : wander_distance;
-                        ((Creature*)pSource)->GetMotionMaster()->MoveRandomAroundPoint(respX, respY, respZ, wander_distance);
+                        source->GetMotionMaster()->MoveRandomAroundPoint(respX, respY, respZ, wander_distance);
                     }
                     break;
                 case WAYPOINT_MOTION_TYPE:
-                    ((Creature*)pSource)->GetMotionMaster()->MoveWaypoint(m_script->movement.wanderORpathId);
+                    source->StopMoving();
+                    source->GetMotionMaster()->Clear(false, true);
+                    source->GetMotionMaster()->MoveWaypoint(m_script->movement.wanderORpathId);
                     break;
             }
 
@@ -1785,9 +1791,9 @@ bool ScriptAction::HandleScriptStep()
             Creature* pAttacker = static_cast<Creature*>(pSource);
             Unit* unitTarget = static_cast<Unit*>(pTarget);
 
-            if (pAttacker->IsFriendlyTo(unitTarget))
+            if (!pAttacker->CanAttackNow(unitTarget))
             {
-                sLog.outErrorDb(" DB-SCRIPTS: Process table `%s` id %u, command %u attacker is friendly to target, can not attack (Attacker: %s, Target: %s)", m_table, m_script->id, m_script->command, pAttacker->GetGuidStr().c_str(), unitTarget->GetGuidStr().c_str());
+                sLog.outErrorDb(" DB-SCRIPTS: Process table `%s` id %u, command %u attacker can not attack (Attacker: %s, Target: %s)", m_table, m_script->id, m_script->command, pAttacker->GetGuidStr().c_str(), unitTarget->GetGuidStr().c_str());
                 break;
             }
 
