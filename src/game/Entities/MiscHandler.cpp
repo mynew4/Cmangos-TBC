@@ -168,8 +168,8 @@ void WorldSession::HandleWhoOpcode(WorldPacket& recv_data)
             continue;
 
         // check if target's level is in level range
-        uint32 lvl = pl->getLevel();
-        if (lvl < level_min || lvl > level_max)
+        uint8 lvl = itr->second->getLevel();
+        if (lvl < level_min)
             continue;
 
         // check if class matches classmask
