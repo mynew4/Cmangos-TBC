@@ -1486,7 +1486,7 @@ Battleground.ScoreStatistics = 0
 Battleground.InvitationType = 0
 BattleGround.PrematureFinishTimer = 300000
 BattleGround.PremadeGroupWaitForMatch = 1800000
-BattleGround.CrossfactionQueueing = 0
+BattleGround.CrossfactionQueueing = 1
 
 ###################################################################################################################
 # ARENA CONFIG
